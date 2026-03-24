@@ -1,149 +1,139 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Datos IoT</title>
+  <meta charset="UTF-8">
+  <title>Dashboard IoT</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<style>
-body{
-  background:#111;
-  color:white;
-  text-align:center;
-  font-family:Arial;
-}
-
-.card{
-  background:#1e1e1e;
-  padding:20px;
-  margin:10px;
-  border-radius:10px;
-  display:inline-block;
-}
-</style>
-
+  <style>
+    body { font-family: Arial; background: #0f172a; color: white; text-align: center; }
+    .card { background: #1e293b; padding: 20px; margin: 10px; border-radius: 12px; display: inline-block; width: 200px; }
+    button { padding: 10px 20px; border: none; border-radius: 10px; background: #38bdf8; color: black; font-weight: bold; cursor: pointer; margin-top: 20px; }
+    #historialBox { max-height: 300px; overflow-y: scroll; background: #1e293b; margin: 20px auto; padding: 10px; border-radius: 10px; width: 80%; display: none; text-align: left; }
+    .item { border-bottom: 1px solid gray; padding: 5px; }
+    canvas { background: white; border-radius: 10px; margin-top: 20px; }
+  </style>
 </head>
 <body>
 
-<h1> Sensores ESP32</h1>
+<h1>Esp32 Estacion Meteorologica</h1>
 
 <div class="card">
-<h2>Temperatura</h2>
-<h1 id="temp">--</h1>
+  <h2>Temperatura</h2>
+  <p id="temp">-- °C</p>
 </div>
 
 <div class="card">
-<h2>Humedad</h2>
-<h1 id="hum">--</h1>
+  <h2>Humedad</h2>
+  <p id="hum">-- %</p>
 </div>
 
 <div class="card">
+  <h2>Presión</h2>
+  <p id="pres">-- hPa</p>
+</div>
+
+<h2>Temperatura y Humedad</h2>
+<canvas id="chartTH" width="600" height="250"></canvas>
+
 <h2>Presión</h2>
-<h1 id="pres">--</h1>
-</div>
+<canvas id="chartP" width="600" height="250"></canvas>
 
-<div class="card">
-<h2>Promedio Temp</h2>
-<h1 id="promTemp">--</h1>
-</div>
+<button onclick="toggleHistorial()">Ver historial</button>
+<div id="historialBox"></div>
 
-<div class="card">
-<h2>Promedio Hum</h2>
-<h1 id="promHum">--</h1>
-</div>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCm9_eJlfq_DEObXcULBNIUUxNW5-cx53E",
+    databaseURL: "https://esp32-cf2b3-default-rtdb.firebaseio.com/",
+  };
 
-<canvas id="grafica"></canvas>
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 
-<script type="module">
+  db.ref("/sensores/temperatura").on("value", s => temp.innerText = s.val() + " °C");
+  db.ref("/sensores/humedad").on("value", s => hum.innerText = s.val() + " %");
+  db.ref("/sensores/presion").on("value", s => pres.innerText = s.val() + " hPa");
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  let labels = [];
+  let tempData = [];
+  let humData = [];
+  let presData = [];
 
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCm9_eJlfq_DEObXcULBNIUUxNW5-cx53E",
-  databaseURL: "https://esp32-cf2b3-default-rtdb.firebaseio.com/"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
-
-const tempRef = ref(db, "sensores/temperatura");
-const humRef = ref(db, "sensores/humedad");
-const presRef = ref(db, "sensores/presion");
-const historialRef = ref(db, "historial");
-
-
-const ctx = document.getElementById("grafica");
-
-const chart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [
-      {label:"Temperatura", data:[]},
-      {label:"Humedad", data:[]}
-    ]
-  }
-});
-
-
-function agregarDato(temp, hum){
-  const hora = new Date().toLocaleTimeString();
-
-  chart.data.labels.push(hora);
-  chart.data.datasets[0].data.push(temp);
-  chart.data.datasets[1].data.push(hum);
-
-  if(chart.data.labels.length > 20){
-    chart.data.labels.shift();
-    chart.data.datasets.forEach(d => d.data.shift());
-  }
-
-  chart.update();
-}
-
-function promedio(lista){
-  let suma = 0;
-  lista.forEach(v => suma += v);
-  return (suma / lista.length).toFixed(2);
-}
-
-
-onValue(tempRef, snap => {
-  document.getElementById("temp").innerText = snap.val();
-});
-
-onValue(humRef, snap => {
-  document.getElementById("hum").innerText = snap.val();
-});
-
-onValue(presRef, snap => {
-  document.getElementById("pres").innerText = snap.val();
-});
-
-onValue(historialRef, snap => {
-
-  const datos = snap.val();
-  if(!datos) return;
-
-  let temps = [];
-  let hums = [];
-
-  Object.values(datos).forEach(d => {
-    temps.push(d.temperatura);
-    hums.push(d.humedad);
-
-    agregarDato(d.temperatura, d.humedad);
+  const chartTH = new Chart(document.getElementById("chartTH"), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Temperatura', data: tempData, borderWidth: 2 },
+        { label: 'Humedad', data: humData, borderWidth: 2 }
+      ]
+    }
   });
 
-  document.getElementById("promTemp").innerText = promedio(temps);
-  document.getElementById("promHum").innerText = promedio(hums);
+  const chartP = new Chart(document.getElementById("chartP"), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Presión', data: presData, borderWidth: 2 }
+      ]
+    }
+  });
 
-});
+  db.ref("/sensores").on("value", snap => {
+    const d = snap.val();
+    const now = new Date().toLocaleTimeString();
 
+    labels.push(now);
+    tempData.push(d.temperatura);
+    humData.push(d.humedad);
+    presData.push(d.presion);
+
+    if (labels.length > 30) {
+      labels.shift();
+      tempData.shift();
+      humData.shift();
+      presData.shift();
+    }
+
+    chartTH.update();
+    chartP.update();
+  });
+
+  const historialBox = document.getElementById("historialBox");
+
+  function toggleHistorial() {
+    historialBox.style.display = historialBox.style.display === "none" ? "block" : "none";
+  }
+
+  db.ref("/historial").on("value", snapshot => {
+    const data = snapshot.val();
+    historialBox.innerHTML = "";
+
+    if (!data) return;
+
+    let keys = Object.keys(data).sort().reverse();
+
+    keys.forEach(key => {
+      let item = data[key];
+      let div = document.createElement("div");
+      div.className = "item";
+
+      let fecha = new Date(parseInt(key)).toLocaleString();
+
+      div.innerHTML = `
+        <strong>${fecha}</strong><br>
+        🌡️ Temp: ${item.temperatura} °C<br>
+        💧 Hum: ${item.humedad} %<br>
+        🌬️ Presión: ${item.presion} hPa
+      `;
+
+      historialBox.appendChild(div);
+    });
+  });
 </script>
 
 </body>
