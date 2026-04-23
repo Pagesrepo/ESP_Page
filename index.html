@@ -20,120 +20,182 @@
 
 <h1>Esp32 Estacion Meteorologica</h1>
 
-<div class="card">
-  <h2>Temperatura</h2>
-  <p id="temp">-- °C</p>
-</div>
+<!-- CARDS -->
+<div class="card"><h2>Temperatura</h2><p id="temp">-- °C</p></div>
+<div class="card"><h2>Humedad</h2><p id="hum">-- %</p></div>
+<div class="card"><h2>Presión</h2><p id="pres">-- hPa</p></div>
+<div class="card"><h2>Lluvia</h2><p id="rain">-- mm</p></div>
+<div class="card"><h2>Vel. Viento</h2><p id="wind">-- m/s</p></div>
+<div class="card"><h2>Dir. Viento</h2><p id="dir">-- °</p></div>
 
-<div class="card">
-  <h2>Humedad</h2>
-  <p id="hum">-- %</p>
-</div>
-
-<div class="card">
-  <h2>Presión</h2>
-  <p id="pres">-- hPa</p>
-</div>
-
+<!-- GRÁFICAS -->
 <h2>Temperatura y Humedad</h2>
 <canvas id="chartTH" width="600" height="250"></canvas>
 
 <h2>Presión</h2>
 <canvas id="chartP" width="600" height="250"></canvas>
 
+<h2>Viento</h2>
+<canvas id="chartWind" width="600" height="250"></canvas>
+
+<h2>Lluvia</h2>
+<canvas id="chartRain" width="600" height="250"></canvas>
+
 <button onclick="toggleHistorial()">Ver historial</button>
 <div id="historialBox"></div>
 
 <script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyCm9_eJlfq_DEObXcULBNIUUxNW5-cx53E",
-    databaseURL: "https://esp32-cf2b3-default-rtdb.firebaseio.com/",
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  databaseURL: "https://esp32-cf2b3-default-rtdb.firebaseio.com/",
+};
 
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-  db.ref("/sensores/temperatura").on("value", s => temp.innerText = s.val() + " °C");
-  db.ref("/sensores/humedad").on("value", s => hum.innerText = s.val() + " %");
-  db.ref("/sensores/presion").on("value", s => pres.innerText = s.val() + " hPa");
+// REFERENCIAS HTML (IMPORTANTE)
+const temp = document.getElementById("temp");
+const hum = document.getElementById("hum");
+const pres = document.getElementById("pres");
+const rain = document.getElementById("rain");
+const wind = document.getElementById("wind");
+const dir = document.getElementById("dir");
+const historialBox = document.getElementById("historialBox");
 
-  let labels = [];
-  let tempData = [];
-  let humData = [];
-  let presData = [];
+// TIEMPO REAL
+db.ref("/sensores/temperatura").on("value", s => temp.innerText = (s.val() ?? "--") + " °C");
+db.ref("/sensores/humedad").on("value", s => hum.innerText = (s.val() ?? "--") + " %");
+db.ref("/sensores/presion").on("value", s => pres.innerText = (s.val() ?? "--") + " hPa");
+db.ref("/sensores/lluvia").on("value", s => rain.innerText = (s.val() ?? "--") + " mm");
+db.ref("/sensores/velocidad_viento").on("value", s => wind.innerText = (s.val() ?? "--") + " m/s");
+db.ref("/sensores/direccion_viento").on("value", s => dir.innerText = (s.val() ?? "--") + " °");
 
-  const chartTH = new Chart(document.getElementById("chartTH"), {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
-        { label: 'Temperatura', data: tempData, borderWidth: 2 },
-        { label: 'Humedad', data: humData, borderWidth: 2 }
-      ]
-    }
-  });
+// ARRAYS
+let labels = [];
+let tempData = [];
+let humData = [];
+let presData = [];
+let windData = [];
+let dirData = [];
+let rainData = [];
 
-  const chartP = new Chart(document.getElementById("chartP"), {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
-        { label: 'Presión', data: presData, borderWidth: 2 }
-      ]
-    }
-  });
+// DESACTIVAR ANIMACIONES (DEBUG)
+Chart.defaults.animation = false;
 
-  db.ref("/sensores").on("value", snap => {
-    const d = snap.val();
-    const now = new Date().toLocaleTimeString();
+// GRÁFICAS (CORRECTO)
+const chartTH = new Chart(document.getElementById("chartTH"), {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: 'Temperatura', data: tempData },
+      { label: 'Humedad', data: humData }
+    ]
+  }
+});
 
-    labels.push(now);
-    tempData.push(d.temperatura);
-    humData.push(d.humedad);
-    presData.push(d.presion);
+const chartP = new Chart(document.getElementById("chartP"), {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: 'Presión', data: presData }
+    ]
+  }
+});
 
-    if (labels.length > 30) {
-      labels.shift();
-      tempData.shift();
-      humData.shift();
-      presData.shift();
-    }
+const chartWind = new Chart(document.getElementById("chartWind"), {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: 'Velocidad', data: windData },
+      { label: 'Dirección', data: dirData }
+    ]
+  }
+});
 
-    chartTH.update();
-    chartP.update();
-  });
+const chartRain = new Chart(document.getElementById("chartRain"), {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: 'Lluvia', data: rainData }
+    ]
+  }
+});
 
-  const historialBox = document.getElementById("historialBox");
+// ACTUALIZACIÓN SEGURA
+db.ref("/sensores").on("value", snap => {
+  const d = snap.val();
+  if (!d) return;
 
-  function toggleHistorial() {
-    historialBox.style.display = historialBox.style.display === "none" ? "block" : "none";
+  console.log("Datos:", d);
+
+  const now = new Date().toLocaleTimeString();
+
+  labels.push(now);
+  tempData.push(d.temperatura || 0);
+  humData.push(d.humedad || 0);
+  presData.push(d.presion || 0);
+  windData.push(d.velocidad_viento || 0);
+  dirData.push(d.direccion_viento || 0);
+  rainData.push(d.lluvia || 0);
+
+  if (labels.length > 30) {
+    labels.shift();
+    tempData.shift();
+    humData.shift();
+    presData.shift();
+    windData.shift();
+    dirData.shift();
+    rainData.shift();
   }
 
-  db.ref("/historial").on("value", snapshot => {
-    const data = snapshot.val();
-    historialBox.innerHTML = "";
+  chartTH.update();
+  chartP.update();
+  chartWind.update();
+  chartRain.update();
+});
 
-    if (!data) return;
+// BOTÓN HISTORIAL (ARREGLADO)
+let historialVisible = false;
 
-    let keys = Object.keys(data).sort().reverse();
+function toggleHistorial() {
+  historialVisible = !historialVisible;
+  historialBox.style.display = historialVisible ? "block" : "none";
+}
 
-    keys.forEach(key => {
-      let item = data[key];
-      let div = document.createElement("div");
-      div.className = "item";
+// HISTORIAL (NO INTERFIERE CON BOTÓN)
+db.ref("/historial").on("value", snapshot => {
+  const data = snapshot.val();
+  if (!data) return;
 
-      let fecha = new Date(parseInt(key)).toLocaleString();
+  historialBox.innerHTML = "";
 
-      div.innerHTML = `
-        <strong>${fecha}</strong><br>
-        🌡️ Temp: ${item.temperatura} °C<br>
-        💧 Hum: ${item.humedad} %<br>
-        🌬️ Presión: ${item.presion} hPa
-      `;
+  let keys = Object.keys(data).sort().reverse();
 
-      historialBox.appendChild(div);
-    });
+  keys.forEach(key => {
+    let item = data[key];
+
+    let div = document.createElement("div");
+    div.className = "item";
+
+    let fecha = new Date(parseInt(key)).toLocaleString();
+
+    div.innerHTML = `
+      <strong>${fecha}</strong><br>
+      🌡️ Temp: ${item.temperatura ?? "--"} °C<br>
+      💧 Hum: ${item.humedad ?? "--"} %<br>
+      🌬️ Presión: ${item.presion ?? "--"} hPa<br>
+      🌧️ Lluvia: ${item.lluvia ?? "--"} mm<br>
+      💨 Viento: ${item.velocidad_viento ?? "--"} m/s<br>
+      🧭 Dirección: ${item.direccion_viento ?? "--"} °
+    `;
+
+    historialBox.appendChild(div);
   });
+});
 </script>
 
 </body>
